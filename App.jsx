@@ -366,18 +366,18 @@ export default function App() {
     `;
 
     try {
-     const data = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: userQuery }] }],
-          systemInstruction: { parts: [{ text: systemPrompt }] },
-          generationConfig: { 
-            responseMimeType: "application/json",
-            responseSchema: isPlan ? planSchema : activitySchema
-          }
-        })
-      });
+     const data = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    contents: [{ parts: [{ text: userQuery }] }],
+    systemInstruction: { parts: [{ text: systemPrompt }] },
+    generationConfig: { 
+      responseMimeType: "application/json",
+      responseSchema: isPlan ? planSchema : activitySchema
+    }
+  })
+});
       
       const res = JSON.parse(data.candidates[0].content.parts[0].text);
       if (isPlan) setPlano(res); else setAtividade(res);
