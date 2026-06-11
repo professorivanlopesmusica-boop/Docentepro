@@ -11,7 +11,7 @@ import {
 const PDFJS_URL = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
 const PDFJS_WORKER_URL = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 
-const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ""; // A chave da API é injetada automaticamente
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY || "";
 
 // --- ESTRUTURA BNCC COM TURMAS/ANOS ---
 const BNCC_STRUCTURE = {
