@@ -4,14 +4,15 @@ import {
   ScrollText, Brain, GraduationCap, Clock, Check, RefreshCw, 
   UploadCloud, ChevronDown, Calculator, Globe, Microscope, 
   Music, Dumbbell, Languages, Scale, Settings2, Copy, AlertCircle, 
-  BookType, Download
+  BookType, Download, Lock
 } from 'lucide-react';
 
 // URL do PDF.js
 const PDFJS_URL = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
 const PDFJS_WORKER_URL = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 
-const apiKey = import.meta.env.VITE_GEMINI_API_KEY || "";
+// A chave da API é injetada automaticamente de forma segura a partir do Environment da Vercel
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ""; 
 
 // --- ESTRUTURA BNCC COM TURMAS/ANOS ---
 const BNCC_STRUCTURE = {
@@ -89,6 +90,10 @@ export default function App() {
   const [pageRange, setPageRange] = useState({ start: 1, end: 5 });
   const [isReadingPdf, setIsReadingPdf] = useState(false);
 
+  // --- ESTADOS DO SISTEMA DE MONETIZAÇÃO EXPRESS ---
+  const [usageCount, setUsageCount] = useState(0);
+  const [isPremium, setIsPremium] = useState(false);
+
   // Estados Base
   const [selectedLevel, setSelectedLevel] = useState("Ensino Fundamental I");
   const [selectedYear, setSelectedYear] = useState("1º Ano");
@@ -115,6 +120,21 @@ export default function App() {
   const [atividade, setAtividade] = useState(null);
 
   const displaySubject = selectedSubject === "Outros" ? (customSubject || "Parte Diversificada") : selectedSubject;
+
+  // --- VALIDAÇÃO DE COMPRA E CARREGAMENTO DE CONTROLE LOCAL ---
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('token') === 'sucesso123') {
+      localStorage.setItem('docentepro_is_premium', 'true');
+      setIsPremium(true);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else {
+      const savedPremium = localStorage.getItem('docentepro_is_premium') === 'true';
+      const savedUsage = parseInt(localStorage.getItem('docentepro_usage_count') || '0', 10);
+      setIsPremium(savedPremium);
+      setUsageCount(savedUsage);
+    }
+  }, []);
 
   // Lógica Cascata
   useEffect(() => {
@@ -181,14 +201,10 @@ export default function App() {
     }
   };
 
-  // --- IMPRESSÃO NATIVA SEGURA ---
   const handlePrint = () => {
-    // Ao chamar window.print() o CSS nativo @media print entra em ação.
-    // Todas as classes "print:hidden", "print:bg-white", etc. tratam do layout.
     window.print();
   };
 
-  // --- EXPORTAR PARA WORD (.DOC) CLONANDO O ECRÃ ---
   const exportToDoc = () => {
     const isPlan = activeTab === 'plano';
     const docData = isPlan ? plano : atividade;
@@ -201,13 +217,11 @@ export default function App() {
     const title = `${isPlan ? 'PLANO' : 'ATIV'}_${(meta.turma || 'Geral').replace(/[^a-z0-9]/gi, '_')}`;
     const contentId = isPlan ? 'print-plano' : 'print-atividade';
     
-    // Captura o HTML exato que está renderizado no ecrã (à prova de falhas na estrutura do JSON)
     const element = document.getElementById(contentId);
     if (!element) return;
     
     const contentHTML = element.innerHTML;
 
-    // Constrói um documento HTML otimizado para o Word
     const htmlFull = `
       <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
       <head>
@@ -217,7 +231,6 @@ export default function App() {
           body { font-family: 'Segoe UI', Arial, sans-serif; color: #000; font-size: 11pt; line-height: 1.5; }
           h1 { font-size: 16pt; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 20px; }
           h3, h4 { font-size: 13pt; margin-top: 15px; margin-bottom: 10px; color: #333; }
-          /* Converte classes Tailwind em CSS compreendido pelo Word */
           .flex, .grid { display: table; width: 100%; margin-bottom: 15px; }
           .flex-1, .col-span-2 { display: table-cell; padding: 5px; }
           .border-b { border-bottom: 1px solid #ccc; }
@@ -227,7 +240,6 @@ export default function App() {
           .text-xs { font-size: 9pt; color: #666; }
           ul { margin-top: 5px; margin-bottom: 15px; padding-left: 20px; }
           li { margin-bottom: 5px; }
-          /* Esconde SVGs/Ícones pois quebram no Word */
           svg { display: none !important; } 
           button { display: none !important; }
         </style>
@@ -238,7 +250,6 @@ export default function App() {
       </html>
     `;
 
-    // Cria o Blob no formato MIME correto para Word
     const blob = new Blob(['\ufeff', htmlFull], { type: 'application/msword;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -259,7 +270,7 @@ export default function App() {
     const el = document.getElementById(contentId);
     if (!el) return;
     const textarea = document.createElement('textarea');
-    textarea.value = el.innerText; // Copia apenas o texto puro, formatado com quebras de linha
+    textarea.value = el.innerText;
     document.body.appendChild(textarea);
     textarea.select();
     try {
@@ -298,6 +309,12 @@ export default function App() {
     }
     if (selectedSubject === "Outros" && !customSubject.trim()) {
       setError("Por favor, escreva o nome da disciplina na Parte Diversificada.");
+      return;
+    }
+
+    // --- BLOQUEIO COMERCIAL EXCLUSIVO ---
+    if (usageCount >= 3 && !isPremium) {
+      setError("LIMITE_EXCEDIDO");
       return;
     }
 
@@ -366,22 +383,30 @@ export default function App() {
     `;
 
     try {
-     const data = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    contents: [{ parts: [{ text: userQuery }] }],
-    systemInstruction: { parts: [{ text: systemPrompt }] },
-    generationConfig: { 
-      responseMimeType: "application/json",
-      responseSchema: isPlan ? planSchema : activitySchema
-    }
-  })
-});
+      // Ajustado para o modelo estável mais recente do Gemini, solucionando o Erro 403
+      const data = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: userQuery }] }],
+          systemInstruction: { parts: [{ text: systemPrompt }] },
+          generationConfig: { 
+            responseMimeType: "application/json",
+            responseSchema: isPlan ? planSchema : activitySchema
+          }
+        })
+      });
       
       const res = JSON.parse(data.candidates[0].content.parts[0].text);
       if (isPlan) setPlano(res); else setAtividade(res);
       setActiveTab(type);
+      
+      // Se a geração foi bem sucedida, incrementamos o limite local de acessos gratuitos
+      if (!isPremium) {
+        const nextUsage = usageCount + 1;
+        setUsageCount(nextUsage);
+        localStorage.setItem('docentepro_usage_count', nextUsage.toString());
+      }
       
     } catch (e) {
       console.error(e);
@@ -396,7 +421,6 @@ export default function App() {
   const currentSubjects = (currentLevelData && currentLevelData.areas[selectedArea]) ? currentLevelData.areas[selectedArea] : [];
 
   return (
-    // Adicionamos print:bg-white e print:block para que o CSS de impressão assuma o controlo
     <div className="min-h-screen bg-slate-100/50 flex flex-col xl:flex-row font-sans text-slate-800 print:bg-white print:block">
       
       {/* SIDEBAR DE CONTROLO - Escondida na impressão nativa */}
@@ -413,11 +437,38 @@ export default function App() {
             <h1 className="text-2xl font-black tracking-tight">Docente<span className="text-blue-400">Pro</span></h1>
           </div>
           <p className="text-[11px] font-medium opacity-80 tracking-widest relative z-10 pl-[52px] uppercase">Planeador IA • BNCC Integrada</p>
+          
+          {/* Tag indicativa de plano freemium */}
+          <div className="absolute bottom-2 right-4">
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isPremium ? 'bg-amber-400 text-slate-950' : 'bg-slate-700 text-slate-300'}`}>
+              {isPremium ? "Acesso Premium" : `Acessos Gratuitos: ${usageCount}/3`}
+            </span>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-5 space-y-6 custom-scrollbar">
           
-          {error && (
+          {/* MODAL / BOX EM CASO DE LIMITE ATINGIDO */}
+          {error === "LIMITE_EXCEDIDO" && (
+            <div className="bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-orange-200 p-5 rounded-2xl shadow-sm text-center animate-in fade-in zoom-in-95 duration-200">
+              <Lock size={32} className="text-orange-600 mx-auto mb-2" />
+              <h3 className="font-black text-slate-900 text-base mb-1">Você atingiu o limite gratuito!</h3>
+              <p className="text-xs text-slate-600 leading-relaxed mb-4">
+                Desbloqueie o acesso ilimitado para gerar infinitos planos de aula e atividades focadas na BNCC.
+              </p>
+              {/* SUBSTITUA O LINK ABAIXO PELO SEU LINK DA PLATAFORMA DE PAGAMENTO DA HUBLA */}
+              <a 
+                href="https://seu-link-da-hubla-aqui.com" 
+                target="_blank" 
+                rel="noreferrer" 
+                className="inline-block w-full bg-gradient-to-r from-orange-600 to-amber-500 text-white font-bold py-2.5 rounded-xl text-xs uppercase tracking-wider shadow-md hover:opacity-95 transition-all"
+              >
+                Desbloquear Acesso Ilimitado
+              </a>
+            </div>
+          )}
+
+          {error && error !== "LIMITE_EXCEDIDO" && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-start gap-3">
               <AlertCircle size={20} className="shrink-0 mt-0.5" />
               <p className="text-sm font-medium">{error}</p>
@@ -569,7 +620,7 @@ export default function App() {
             </div>
             
             <div>
-               <label className="text-[11px] font-bold text-slate-500 uppercase mb-1.5 flex items-center gap-1">Código BNCC Manual (Opcional)</label>
+               <label className="text-[11px] font-bold text-slate-500 uppercase mb-1.5 block">Código BNCC Manual (Opcional)</label>
                <input type="text" placeholder="Ex: EF03MA05" className="w-full text-sm p-2.5 border border-slate-200 rounded-lg focus:border-blue-400 outline-none" value={meta.extraSkills} onChange={e => setMeta({...meta, extraSkills: e.target.value})} />
             </div>
           </section>
@@ -586,7 +637,7 @@ export default function App() {
         </div>
       </aside>
 
-      {/* ÁREA DE VISUALIZAÇÃO - A estrutura print: assume o controlo na hora de imprimir */}
+      {/* ÁREA DE VISUALIZAÇÃO */}
       <main className="flex-1 flex flex-col overflow-hidden relative bg-[#eef2f6] print:bg-white print:overflow-visible print:block">
         
         <div className="absolute top-6 left-1/2 -translate-x-1/2 z-40 bg-white shadow-xl rounded-full p-1.5 flex gap-1 print:hidden border border-slate-100">
